@@ -1,0 +1,188 @@
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+}
+
+#app {
+  width: max-content;
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
+}
+
+#bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(0, 0, 0, 0.78);
+  padding: 6px 10px;
+  border-radius: 999px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  width: max-content;
+}
+
+#dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #999;
+  flex-shrink: 0;
+}
+
+#dot.on {
+  background: #22c55e;
+}
+
+#bar button {
+  border: none;
+  border-radius: 999px;
+  font-size: 12px;
+  padding: 5px 10px;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+  white-space: nowrap;
+}
+
+#bar button:hover {
+  background: rgba(255, 255, 255, 0.28);
+}
+
+#bar button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+#bar #btn-toggle {
+  padding: 5px 8px;
+}
+
+#card {
+  margin-top: 8px;
+  width: 320px;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  padding: 10px;
+  box-sizing: border-box;
+}
+
+#card .row {
+  margin-bottom: 8px;
+}
+
+.url-row {
+  display: flex;
+  gap: 4px;
+}
+
+#url {
+  flex: 1;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  font-size: 12px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+
+#btn-sync {
+  border: 1px solid #ccc;
+  background: #f5f5f5;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 0 8px;
+}
+
+#card label {
+  display: block;
+  font-size: 12px;
+  color: #333;
+  margin-bottom: 2px;
+}
+
+#card textarea {
+  width: 100%;
+  box-sizing: border-box;
+  font-size: 12px;
+  resize: vertical;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 6px 8px;
+}
+
+.status {
+  font-size: 12px;
+  color: #555;
+  min-height: 16px;
+  margin-bottom: 8px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.info {
+  font-size: 12px;
+  background: #f5f5f5;
+  padding: 6px 8px;
+  border-radius: 4px;
+  margin-bottom: 8px;
+  word-break: break-all;
+}
+
+.confirm {
+  width: 100%;
+  padding: 8px;
+  font-size: 13px;
+  cursor: pointer;
+  background: #16a34a;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  margin-bottom: 8px;
+}
+
+.divider {
+  border-top: 1px solid #eee;
+  margin: 10px 0;
+}
+
+.section-title {
+  font-size: 12px;
+  color: #333;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.batch {
+  width: 100%;
+  padding: 7px;
+  font-size: 12px;
+  cursor: pointer;
+  background: #2563eb;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  margin-bottom: 8px;
+}
+
+.batch:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.batch-progress {
+  font-size: 12px;
+  color: #555;
+  max-height: 140px;
+  overflow-y: auto;
+}
+
+.batch-progress div {
+  padding: 2px 0;
+  word-break: break-all;
+  border-bottom: 1px dashed #eee;
+}
+
+.hidden {
+  display: none;
+}

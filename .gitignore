@@ -1,0 +1,21 @@
+.DS_Store
+node_modules/
+
+# ===== 敏感信息与本地状态，禁止上传 =====
+.env
+.env.*
+!.env.example
+server/.feishu-state.json
+
+# 构建产物
+server/.next/
+server/tsconfig.tsbuildinfo
+
+# whisper 模型（数 GB，本地下载）
+models/
+
+# 第三方解析服务（内含抖音 Cookie，需自行克隆，见 README）
+vendor/
+
+# 测试产物
+e2e/screenshot-*.png

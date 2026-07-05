@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <link rel="stylesheet" href="panel.css" />
+</head>
+<body>
+  <div id="app">
+    <div id="bar">
+      <span id="dot" title="视频识别状态"></span>
+      <button id="btn-download" class="act">下载视频</button>
+      <button id="btn-transcribe" class="act">提取文案</button>
+      <button id="btn-rewrite" class="act">改写</button>
+      <button id="btn-toggle" title="展开 / 收起详情">▾</button>
+    </div>
+    <div id="card" class="hidden">
+      <div class="row url-row">
+        <input id="url" type="text" placeholder="未识别到视频，可手动粘贴链接" />
+        <button id="btn-sync" title="重新使用自动识别的链接">↻</button>
+      </div>
+      <div id="status" class="status"></div>
+      <div id="info" class="info hidden"></div>
+      <div class="row">
+        <label>原文案</label>
+        <textarea id="transcript" rows="4" placeholder="点击「提取文案」后显示，也可手动填写"></textarea>
+      </div>
+      <div class="row">
+        <label>改写稿</label>
+        <textarea id="rewrite" rows="4" placeholder="点击「改写」后显示"></textarea>
+      </div>
+      <button id="btn-confirm" class="confirm hidden">确认并保存</button>
+      <div id="save-result" class="status"></div>
+      <div class="divider"></div>
+      <div class="section-title">批量提取（一行一个链接，自动提取文案并存档）</div>
+      <div class="row">
+        <textarea id="batch-urls" rows="4" placeholder="每行粘贴一个抖音/小红书链接&#10;https://v.douyin.com/xxxx/&#10;https://www.xiaohongshu.com/explore/xxxx?xsec_token=xxx"></textarea>
+      </div>
+      <button id="btn-batch" class="batch">批量提取</button>
+      <div id="batch-progress" class="batch-progress"></div>
+    </div>
+  </div>
+  <script src="panel.js"></script>
+</body>
+</html>

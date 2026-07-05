@@ -1,0 +1,35 @@
+{
+  "manifest_version": 3,
+  "name": "抖音/小红书爆款文案提取与改写",
+  "version": "0.2.0",
+  "description": "粘贴抖音或小红书链接，提取文案、下载视频、二次改写",
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "host_permissions": [
+    "http://localhost:3300/*",
+    "http://127.0.0.1:3300/*",
+    "https://www.douyin.com/*",
+    "https://www.xiaohongshu.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://www.douyin.com/*"],
+      "js": ["content/page-hook.js"],
+      "world": "MAIN",
+      "run_at": "document_start"
+    },
+    {
+      "matches": ["https://www.douyin.com/*", "https://www.xiaohongshu.com/*"],
+      "js": ["content/content.js"],
+      "css": ["content/content.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["content/panel.html", "content/panel.css", "content/panel.js"],
+      "matches": ["https://www.douyin.com/*", "https://www.xiaohongshu.com/*"]
+    }
+  ]
+}

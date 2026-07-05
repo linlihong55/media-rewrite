@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>抖音/小红书爆款文案提取与改写</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <div class="container">
+    <h1>抖音/小红书爆款文案提取与改写</h1>
+
+    <input id="url-input" type="text" placeholder="粘贴抖音/小红书分享链接..." />
+
+    <div class="buttons">
+      <button id="btn-download">下载视频</button>
+      <button id="btn-transcribe">提取文案</button>
+      <button id="btn-rewrite">改写</button>
+    </div>
+
+    <div id="status" class="status"></div>
+
+    <div id="video-info" class="video-info hidden">
+      <div><span class="label">标题：</span><span id="info-title"></span></div>
+      <div><span class="label">正文：</span><span id="info-desc"></span></div>
+      <div><span class="label">标签：</span><span id="info-tags"></span></div>
+      <div><span class="label">发布时间：</span><span id="info-publish"></span></div>
+      <div><span class="label">账号：</span><span id="info-author"></span></div>
+      <div><span class="label">粉丝数：</span><span id="info-follower"></span></div>
+      <div><span class="label">点赞数：</span><span id="info-digg"></span></div>
+      <div><span class="label">收藏数：</span><span id="info-collect"></span></div>
+      <div><span class="label">视频文件：</span><span id="info-file"></span></div>
+    </div>
+
+    <div class="field">
+      <label>原文案</label>
+      <textarea id="transcript-box" rows="5" placeholder="点击「提取文案」后显示"></textarea>
+    </div>
+
+    <div class="field">
+      <label>改写稿</label>
+      <textarea id="rewrite-box" rows="5" placeholder="点击「改写」后显示"></textarea>
+    </div>
+
+    <button id="btn-confirm-save" class="confirm hidden">确认并保存</button>
+
+    <div id="save-result" class="status"></div>
+
+    <div class="divider"></div>
+
+    <div class="field">
+      <label>批量提取（一行一个链接，自动提取文案并存档）</label>
+      <textarea id="batch-urls" rows="4" placeholder="每行粘贴一个抖音/小红书链接"></textarea>
+    </div>
+    <button id="btn-batch" class="batch">批量提取</button>
+    <div id="batch-progress" class="batch-progress"></div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
