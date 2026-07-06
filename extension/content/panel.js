@@ -2,15 +2,10 @@
 // 抖音页面脚本无法拦截 iframe 内部的键盘 / 鼠标事件，输入框、按钮不再被页面干扰。
 // 与 content.js（父页面）通过 postMessage 通信：接收自动识别的视频链接，上报面板尺寸。
 const API_BASE = "http://localhost:3300";
+// 抖音/小红书都设了 referrer 策略，iframe 里拿不到宿主 origin。
+// 面板 → 宿主页只发「就绪 / 尺寸」两种无敏感内容的消息，目标用 "*"；
+// 宿主页 → 面板的视频链接消息仍严格校验来源 origin（白名单如下）。
 const ALLOWED_PAGE_ORIGINS = ["https://www.douyin.com", "https://www.xiaohongshu.com"];
-// iframe 的 referrer 就是宿主页面，用它确定往哪个 origin 发消息
-let PAGE_ORIGIN = ALLOWED_PAGE_ORIGINS[0];
-try {
-  const refOrigin = new URL(document.referrer).origin;
-  if (ALLOWED_PAGE_ORIGINS.includes(refOrigin)) PAGE_ORIGIN = refOrigin;
-} catch {
-  // referrer 拿不到时保持默认（抖音）
-}
 
 const dotEl = document.getElementById("dot");
 const cardEl = document.getElementById("card");
@@ -45,11 +40,11 @@ new ResizeObserver(() => {
   const rect = appEl.getBoundingClientRect();
   window.parent.postMessage(
     { type: "dhe:size", width: Math.ceil(rect.width), height: Math.ceil(rect.height) },
-    PAGE_ORIGIN
+    "*"
   );
 }).observe(appEl);
 
-window.parent.postMessage({ type: "dhe:ready" }, PAGE_ORIGIN);
+window.parent.postMessage({ type: "dhe:ready" }, "*");
 
 function isSupportedVideoUrl(url) {
   return (

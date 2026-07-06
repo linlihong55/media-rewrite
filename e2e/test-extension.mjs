@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const EXT_PATH = path.resolve(__dirname, "../extension");
-const VIDEO_URL = "https://www.douyin.com/video/7306059512456744227";
+const VIDEO_URL = "https://www.douyin.com/video/7655626030958267686";
 
 const results = [];
 function check(name, ok, detail = "") {
@@ -33,7 +33,7 @@ const context = await chromium.launchPersistentContext(userDataDir, {
 try {
   const page = context.pages()[0] ?? (await context.newPage());
   console.log(`打开 ${VIDEO_URL} ...`);
-  await page.goto(VIDEO_URL, { waitUntil: "domcontentloaded", timeout: 60000 });
+  await page.goto(VIDEO_URL, { waitUntil: "commit", timeout: 45000 });
 
   // --- 1. 悬浮面板 iframe 注入 ---
   const frameEl = page.locator("#dhe-frame");

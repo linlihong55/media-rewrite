@@ -5,6 +5,9 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type",
+  // Chrome 私有网络访问（PNA）：公网页面上的扩展 iframe 请求 localhost 时，
+  // 新版 Chrome 会先发带此标记的预检，不放行可能导致请求被静默挂起
+  "Access-Control-Allow-Private-Network": "true",
 };
 
 export function withCors(body: unknown, init?: ResponseInit) {
