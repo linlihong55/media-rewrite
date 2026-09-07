@@ -1,4 +1,6 @@
-import { RESOLVER_BASE_URL } from "./paths";
+import { execFile } from "child_process";
+import { promisify } from "util";
+import { RESOLVER_BASE_URL, YTDLP_PATH } from "./paths";
 import { refreshDouyinCookie } from "./refreshCookie";
 import { isXhsUrl, resolveXhsVideo } from "./resolveXhs";
 
@@ -31,6 +33,8 @@ export interface ResolvedVideo {
   noWatermarkUrlBackup?: string;
   sourceUrl: string;
 }
+
+const execFileAsync = promisify(execFile);
 
 function formatPublishTime(createTime: number): string {
   if (!createTime) return "";
@@ -69,9 +73,80 @@ export async function resolveVideo(shareUrl: string): Promise<ResolvedVideo> {
     return await resolveOnce(shareUrl);
   } catch (err) {
     const refreshed = await refreshDouyinCookie();
-    if (!refreshed) throw err;
-    return await resolveOnce(shareUrl);
+    if (refreshed) {
+      try {
+        return await resolveOnce(shareUrl);
+      } catch {
+        // 游客 Cookie 被风控时，继续使用本机 Chrome 登录态兜底。
+      }
+    }
+    try {
+      return await resolveWithYtDlp(shareUrl);
+    } catch (fallbackError) {
+      const detail = fallbackError instanceof Error ? fallbackError.message : String(fallbackError);
+      throw new Error(`抖音解析失败；Chrome 登录态备用解析也未成功：${detail}`, { cause: err });
+    }
   }
+}
+
+interface YtDlpInfo {
+  id?: string;
+  title?: string;
+  description?: string;
+  timestamp?: number;
+  upload_date?: string;
+  uploader?: string;
+  uploader_id?: string;
+  channel_id?: string;
+  webpage_url?: string;
+  url?: string;
+  like_count?: number;
+  comment_count?: number;
+  repost_count?: number;
+  hashtags?: string[];
+}
+
+async function resolveWithYtDlp(shareUrl: string): Promise<ResolvedVideo> {
+  const browser = process.env.DOUYIN_YTDLP_BROWSER ?? "chrome";
+  const { stdout } = await execFileAsync(
+    YTDLP_PATH,
+    ["--cookies-from-browser", browser, "--no-playlist", "--dump-single-json", "--socket-timeout", "30", shareUrl],
+    { timeout: 90_000, maxBuffer: 20 * 1024 * 1024 }
+  );
+  const data = JSON.parse(stdout) as YtDlpInfo;
+  if (!data.id || !data.url) throw new Error("yt-dlp 未返回视频编号或下载地址");
+
+  const desc = data.description ?? data.title ?? "";
+  let createTime = data.timestamp ?? 0;
+  if (!createTime && data.upload_date && /^\d{8}$/.test(data.upload_date)) {
+    const d = data.upload_date;
+    createTime = Math.floor(new Date(`${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}T00:00:00+08:00`).getTime() / 1000);
+  }
+  const authorId = data.uploader_id ?? data.channel_id ?? "";
+
+  return {
+    videoId: data.id,
+    title: extractTitle(desc),
+    desc,
+    hashtags: Array.isArray(data.hashtags) ? data.hashtags.filter(Boolean) : extractHashtags(desc, null),
+    createTime,
+    publishTime: formatPublishTime(createTime),
+    author: {
+      nickname: data.uploader ?? "",
+      uniqueId: authorId,
+      secUid: data.channel_id ?? "",
+      profileUrl: "",
+      followerCount: null,
+    },
+    stats: {
+      diggCount: data.like_count ?? 0,
+      collectCount: 0,
+      commentCount: data.comment_count ?? 0,
+      shareCount: data.repost_count ?? 0,
+    },
+    noWatermarkUrl: data.url,
+    sourceUrl: data.webpage_url ?? shareUrl,
+  };
 }
 
 async function resolveOnce(shareUrl: string): Promise<ResolvedVideo> {

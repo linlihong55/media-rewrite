@@ -43,20 +43,32 @@ const updated = config.replace(/^(\s*)Cookie: .*$/m, (_, indent) => `${indent}Co
 if (updated === config) throw new Error("config.yaml 里没找到 Cookie 行");
 fs.writeFileSync(CONFIG_PATH, updated);
 
-// 3. 重启解析服务
+// 3. 重启解析服务，让新 Cookie 生效
+// 解析服务由 LaunchAgent 托管（KeepAlive），必须用 launchctl 重启才能重新读取 config.yaml；
+// 直接 pkill 会被 launchd 用旧配置立刻拉起，且会和常驻进程抢 18785 端口。
 console.log("3/4 重启解析服务...");
 try {
-  execSync("pkill -f 'python start.py' || true", { shell: "/bin/zsh" });
+  const uid = execSync("id -u").toString().trim();
+  execSync(`launchctl kickstart -k gui/${uid}/com.douyin-hit-extractor.resolver`, {
+    shell: "/bin/zsh",
+  });
 } catch {
-  // 服务本来没在跑也没关系
+  // 没用 LaunchAgent 托管时（比如别的机器上手动跑），退回手动重启
+  try {
+    execSync("pkill -f 'uvicorn app.main:app'; pkill -f 'python start.py'; true", {
+      shell: "/bin/zsh",
+    });
+  } catch {
+    // 服务本来没在跑也没关系
+  }
+  await new Promise((r) => setTimeout(r, 2000));
+  const resolver = spawn(path.join(VENDOR_DIR, ".venv/bin/python"), ["start.py"], {
+    cwd: VENDOR_DIR,
+    detached: true,
+    stdio: "ignore",
+  });
+  resolver.unref();
 }
-await new Promise((r) => setTimeout(r, 2000));
-const resolver = spawn(path.join(VENDOR_DIR, ".venv/bin/python"), ["start.py"], {
-  cwd: VENDOR_DIR,
-  detached: true,
-  stdio: "ignore",
-});
-resolver.unref();
 
 for (let i = 0; i < 30; i++) {
   try {

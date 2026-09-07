@@ -1,7 +1,6 @@
 import { execFile } from "child_process";
 import { promisify } from "util";
 import fs from "fs";
-import path from "path";
 import { WHISPER_CLI_PATH, WHISPER_MODEL_PATH } from "./paths";
 
 const execFileAsync = promisify(execFile);

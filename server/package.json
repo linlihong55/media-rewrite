@@ -3,19 +3,24 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev -p 3300",
-    "build": "next build",
+    "dev": "next dev --webpack -p 3300",
+    "build": "next build --webpack",
     "start": "next start -p 3300",
-    "lint": "eslint"
+    "lint": "eslint",
+    "db:up": "docker compose up -d postgres",
+    "db:migrate": "node --env-file=.env.local scripts/migrate.mjs",
+    "db:down": "docker compose down"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.109.1",
     "next": "16.2.9",
+    "pg": "^8.23.0",
     "react": "19.2.4",
     "react-dom": "19.2.4"
   },
   "devDependencies": {
     "@types/node": "^20",
+    "@types/pg": "^8.21.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",

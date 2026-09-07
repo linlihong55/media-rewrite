@@ -6,10 +6,16 @@ node_modules/
 .env.*
 !.env.example
 server/.feishu-state.json
+server/xhs-state.json
 
 # 构建产物
 server/.next/
 server/tsconfig.tsbuildinfo
+android/.gradle/
+android/app/build/
+android/build/
+android/local.properties
+android/mobile-connection.txt
 
 # whisper 模型（数 GB，本地下载）
 models/
@@ -19,3 +25,7 @@ vendor/
 
 # 测试产物
 e2e/screenshot-*.png
+e2e/debug-*.png
+
+# 打包副本由源码重新生成，不纳入仓库
+server/skills/*.zip

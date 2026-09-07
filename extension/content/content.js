@@ -177,6 +177,7 @@
 
   let frameReady = false;
   let frameWidth = 300;
+  let frameContentHeight = 44;
   let lastAutoUrl = null;
 
   window.addEventListener("message", (e) => {
@@ -185,8 +186,8 @@
     if (!msg) return;
     if (msg.type === "dhe:size") {
       frameWidth = msg.width;
+      frameContentHeight = msg.height;
       iframe.style.width = `${msg.width}px`;
-      iframe.style.height = `${msg.height}px`;
       positionPanel(findActiveVideoEl());
     } else if (msg.type === "dhe:ready") {
       frameReady = true;
@@ -320,13 +321,19 @@
   // ---------- 定位与轮询识别 ----------
 
   function positionPanel(videoEl) {
-    if (!videoEl) return;
-    const rect = videoEl.getBoundingClientRect();
-    if (rect.width === 0 && rect.height === 0) return;
-    const top = Math.max(12, rect.top + 12);
-    const left = Math.min(window.innerWidth - frameWidth - 12, rect.right - frameWidth - 12);
-    iframe.style.top = `${top}px`;
-    iframe.style.left = `${Math.max(12, left)}px`;
+    if (videoEl) {
+      const rect = videoEl.getBoundingClientRect();
+      if (rect.width > 0 || rect.height > 0) {
+        const top = Math.min(Math.max(12, rect.top + 12), Math.max(12, window.innerHeight - 56));
+        const left = Math.min(window.innerWidth - frameWidth - 12, rect.right - frameWidth - 12);
+        iframe.style.top = `${top}px`;
+        iframe.style.left = `${Math.max(12, left)}px`;
+      }
+    }
+
+    const currentTop = Number.parseFloat(iframe.style.top) || 12;
+    const availableHeight = Math.max(44, window.innerHeight - currentTop - 12);
+    iframe.style.height = `${Math.min(frameContentHeight, availableHeight)}px`;
   }
 
   function ensureFrameAttached() {

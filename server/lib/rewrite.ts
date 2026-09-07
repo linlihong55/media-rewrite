@@ -7,33 +7,37 @@ import path from "path";
 //   REWRITE_PROVIDER=claude   → 本机 claude CLI 无头模式（复用 Claude Code 订阅账号，无需 API Key）
 //   REWRITE_PROVIDER=deepseek → DeepSeek OpenAI 兼容接口（需 DEEPSEEK_API_KEY）
 // 主通道失败时自动降级到另一个可用通道。
-// 改写方法论 = 用户的 ai-viral-copywriter Skill + 自动学习的爆款特征库（learned-patterns.md）
+// 改写方法论 = ai-viral-copywriter Skill + 自动学习的爆款特征库（learned-patterns.md）
 const SKILL_DIR = path.join(process.cwd(), "skills", "ai-viral-copywriter");
+const SKILL_PATH = path.join(SKILL_DIR, "SKILL.md");
 export const LEARNED_PATH = path.join(SKILL_DIR, "learned-patterns.md");
 
-let promptCache: { mtime: number; prompt: string } | null = null;
+let promptCache: { cacheKey: string; prompt: string } | null = null;
+
+function fileMtime(pathname: string): number {
+  try {
+    return fs.statSync(pathname).mtimeMs;
+  } catch {
+    return 0;
+  }
+}
 
 function loadSystemPrompt(): string {
-  let learnedMtime = 0;
-  try {
-    learnedMtime = fs.statSync(LEARNED_PATH).mtimeMs;
-  } catch {
-    // 还没有学习成果
+  const skillMtime = fileMtime(SKILL_PATH);
+  if (!skillMtime) {
+    throw new Error(`读不到改写 Skill：${SKILL_PATH}`);
   }
-  if (promptCache && promptCache.mtime === learnedMtime) return promptCache.prompt;
 
-  const skillMd = fs
-    .readFileSync(path.join(SKILL_DIR, "SKILL.md"), "utf-8")
-    .replace(/^---[\s\S]*?---\s*/, "");
+  const cacheKey = `${skillMtime}:${fileMtime(LEARNED_PATH)}`;
+  if (promptCache?.cacheKey === cacheKey) return promptCache.prompt;
 
-  let templates = "";
+  let skillMd: string;
   try {
-    templates = fs.readFileSync(
-      path.join(SKILL_DIR, "references", "viral_templates.md"),
-      "utf-8"
+    skillMd = fs.readFileSync(SKILL_PATH, "utf-8").replace(/^---[\s\S]*?---\s*/, "");
+  } catch (err) {
+    throw new Error(
+      `读取改写 Skill 失败：${err instanceof Error ? err.message : String(err)}`
     );
-  } catch {
-    // 模板库缺失时仅用 SKILL.md
   }
 
   let learned = "";
@@ -47,18 +51,14 @@ function loadSystemPrompt(): string {
 
 ${skillMd}
 
-${templates ? `# 可复用爆款模板库\n\n${templates}\n` : ""}
 ${learned ? `# 从历史爆款中自动学习的最新特征（优先参考，这些来自近期真实爆款）\n\n${learned}\n` : ""}
 # 本次任务
 
-用户会提供一条抖音视频的原始口播文案。请按上述方法论把它改写成一条新的爆款短视频文案，要求：
-- 先给出 3 个爆款标题候选（按标题公式，每行一个）
-- 再给出完整口播正文（口语化、短句、有节奏感，可直接照读）
-- 不要逐句照抄原文：保留核心信息与钩子结构，用新的措辞和句式表达
-- 全程使用中文
-- 只输出「标题：」和「正文：」两个部分，不要输出结构拆解或其他解释`;
+用户会提供一条短视频的原始口播文案。请执行 Skill 中的「改写文案」流程，把它改写成一条新的爆款短视频文案。
 
-  promptCache = { mtime: learnedMtime, prompt };
+严格遵循 Skill 当前定义的标题数量、口播风格和质量检查规则，不要使用服务端旧规则覆盖 Skill。保留原文的核心信息，但不要逐句照抄。只输出爆款标题和完整口播正文，不输出结构拆解或其他解释。`;
+
+  promptCache = { cacheKey, prompt };
   return prompt;
 }
 

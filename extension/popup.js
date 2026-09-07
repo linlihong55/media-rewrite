@@ -14,6 +14,7 @@ const infoCollect = document.getElementById("info-collect");
 const infoFile = document.getElementById("info-file");
 const transcriptBox = document.getElementById("transcript-box");
 const rewriteBox = document.getElementById("rewrite-box");
+const breakdownBox = document.getElementById("breakdown-box");
 const confirmBtn = document.getElementById("btn-confirm-save");
 const saveResultEl = document.getElementById("save-result");
 
@@ -25,7 +26,7 @@ function setStatus(text) {
 }
 
 function setButtonsDisabled(disabled) {
-  for (const id of ["btn-download", "btn-transcribe", "btn-rewrite"]) {
+  for (const id of ["btn-download", "btn-transcribe", "btn-rewrite", "btn-breakdown"]) {
     document.getElementById(id).disabled = disabled;
   }
 }
@@ -56,16 +57,34 @@ function showVideoInfo(video) {
 }
 
 async function callApi(path, body) {
-  const res = await fetch(`${API_BASE}${path}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  const json = await res.json();
-  if (!res.ok) {
-    throw new Error(json.error || `请求失败（${res.status}）`);
+  let res;
+  try {
+    res = await fetch(`${API_BASE}${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  } catch {
+    throw new Error("无法连接本地服务，请确认已在 server 目录运行 npm run dev（端口 3300）");
   }
+  const raw = await res.text();
+  let json;
+  try {
+    json = raw ? JSON.parse(raw) : null;
+  } catch {
+    throw new Error(`本地服务返回了非 JSON 响应（HTTP ${res.status}），请查看 server 终端日志`);
+  }
+  if (!res.ok) {
+    throw new Error(json?.error || `请求失败（HTTP ${res.status}）`);
+  }
+  if (!json) throw new Error(`本地服务返回了空响应（HTTP ${res.status}），请查看 server 终端日志`);
   return json.data;
+}
+
+function formatSaveResult(data) {
+  return data.feishu?.synced
+    ? "✅ 已保存到本地工作台，并同步到飞书"
+    : `⚠️ 已保存到本地工作台；${data.feishu?.message || "飞书未同步"}`;
 }
 
 document.getElementById("btn-download").addEventListener("click", async () => {
@@ -95,7 +114,8 @@ document.getElementById("btn-transcribe").addEventListener("click", async () => 
     currentFilePath = data.filePath;
     showVideoInfo(data);
     transcriptBox.value = data.transcript;
-    setStatus("文案提取完成");
+    confirmBtn.classList.remove("hidden");
+    setStatus("文案提取完成，可直接确认并保存");
   } catch (err) {
     setStatus(`提取失败：${err.message}`);
   } finally {
@@ -119,6 +139,23 @@ document.getElementById("btn-rewrite").addEventListener("click", async () => {
     );
   } catch (err) {
     setStatus(`改写失败：${err.message}`);
+  } finally {
+    setButtonsDisabled(false);
+  }
+});
+
+document.getElementById("btn-breakdown").addEventListener("click", async () => {
+  const text = transcriptBox.value.trim();
+  if (!text) return setStatus("请先提取文案，或手动填写原文案");
+  if (!currentVideo) return setStatus("请先提取文案（需要视频信息才能拆解存档）");
+  setButtonsDisabled(true);
+  setStatus("拆解中...");
+  try {
+    const data = await callApi("/api/breakdown", { video: currentVideo, transcript: text });
+    breakdownBox.value = data.breakdown;
+    setStatus(`拆解完成，已存档至 ${data.filePath}`);
+  } catch (err) {
+    setStatus(`拆解失败：${err.message}`);
   } finally {
     setButtonsDisabled(false);
   }
@@ -152,25 +189,29 @@ batchBtn.addEventListener("click", async () => {
   });
 
   let okCount = 0;
+  let feishuCount = 0;
   for (let i = 0; i < urls.length; i++) {
     const url = urls[i];
     rows[i].textContent = `▶ 提取中（${i + 1}/${urls.length}）${shortenUrl(url)}`;
     setStatus(`批量提取中：第 ${i + 1}/${urls.length} 条（每条需下载 + 转写，请耐心等待）`);
     try {
       const data = await callApi("/api/transcribe", { url });
-      await callApi("/api/save", {
+      const saved = await callApi("/api/save", {
         video: data,
         transcript: data.transcript,
         rewritten: "",
       });
       okCount++;
-      rows[i].textContent = `✅ ${data.title || shortenUrl(url)}｜已同步飞书`;
+      if (saved.feishu?.synced) feishuCount++;
+      rows[i].textContent = `✅ ${data.title || shortenUrl(url)}｜已保存本地${
+        saved.feishu?.synced ? "并同步飞书" : "（飞书未同步）"
+      }`;
     } catch (err) {
       rows[i].textContent = `❌ ${shortenUrl(url)}：${err.message}`;
     }
   }
 
-  setStatus(`批量提取完成：成功 ${okCount}/${urls.length} 条，已同步到飞书多维表格`);
+  setStatus(`批量提取完成：本地保存 ${okCount}/${urls.length} 条，飞书同步 ${feishuCount}/${urls.length} 条`);
   setButtonsDisabled(false);
   batchBtn.disabled = false;
 });
@@ -185,7 +226,7 @@ confirmBtn.addEventListener("click", async () => {
       transcript: transcriptBox.value,
       rewritten: rewriteBox.value,
     });
-    saveResultEl.textContent = `✅ ${data.feishu.message}`;
+    saveResultEl.textContent = formatSaveResult(data);
   } catch (err) {
     saveResultEl.textContent = `保存失败：${err.message}`;
   } finally {

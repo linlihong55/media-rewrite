@@ -1,0 +1,3 @@
+import { NextRequest } from "next/server";
+import { saveMetrics } from "@/lib/workspace";
+export async function POST(req:NextRequest) { try { const b=await req.json(); const data=await saveMetrics({contentItemId:Number(b.contentItemId),platform:b.platform,postUrl:b.postUrl??"",publishedAt:b.publishedAt,windowHours:Number(b.windowHours),views:Number(b.views??0),completionRate:b.completionRate===""||b.completionRate==null?null:Number(b.completionRate),collects:Number(b.collects??0),followerGain:Number(b.followerGain??0),likes:Number(b.likes??0),comments:Number(b.comments??0),shares:Number(b.shares??0)}); return Response.json({data}); } catch(e) { return Response.json({error:e instanceof Error?e.message:"保存失败"},{status:400}); } }

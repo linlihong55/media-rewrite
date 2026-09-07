@@ -1,0 +1,56 @@
+{
+  "l1": [
+    {
+      "id": "ai",
+      "name": "AI",
+      "l2": [
+        {
+          "id": "ai-tools-review",
+          "name": "AI工具测评/教程",
+          "keywords": [
+            "ChatGPT怎么用",
+            "Kimi测评",
+            "豆包测评",
+            "AI工具推荐",
+            "国产AI大模型测评",
+            "AI教程",
+            "howtoai",
+            "AI新手村"
+          ]
+        },
+        {
+          "id": "ai-art-design",
+          "name": "AI绘画/设计",
+          "keywords": [
+            "即梦AI",
+            "AI换脸",
+            "AI摄影",
+            "AI写真"
+          ]
+        },
+        {
+          "id": "ai-coding",
+          "name": "AI编程/开发",
+          "keywords": [
+            "Claude Code怎么用",
+            "AI编程副业接单",
+            "codex教程",
+            "Vibe coding"
+          ]
+        },
+        {
+          "id": "ai-life-hacks",
+          "name": "AI味生活技巧",
+          "keywords": [
+            "AI减脂餐",
+            "AI健身计划",
+            "AI装修设计",
+            "AI育儿",
+            "AI辅导作业",
+            "AI旅游攻略"
+          ]
+        }
+      ]
+    }
+  ]
+}

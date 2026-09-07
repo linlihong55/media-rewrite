@@ -18,7 +18,7 @@ const BROWSER_HEADERS: Record<string, string> = {
 };
 
 // 点赞/收藏数在页面数据里是字符串，热门笔记会写成 "1.2万" 这种形式
-function parseCount(value: unknown): number {
+export function parseCount(value: unknown): number {
   if (typeof value === "number") return value;
   if (typeof value !== "string" || !value) return 0;
   const m = value.match(/^([\d.]+)\s*(万|亿)?/);
@@ -201,4 +201,27 @@ export async function resolveXhsVideo(shareUrl: string): Promise<ResolvedVideo> 
     noWatermarkUrlBackup: originUrl && streamUrl ? streamUrl : undefined,
     sourceUrl: shareUrl,
   };
+}
+
+// 笔记页数据里没有博主粉丝数（上面 followerCount 写死 null），
+// 但匿名抓主页 /user/profile/<userId> 的 __INITIAL_STATE__ 里有，用于自动发现流程的粉丝数过滤。
+// 主页展示的是近似值（如 "1万+"），parseCount 已经能处理「万/亿」格式，多出的 "+" 不影响匹配。
+export async function fetchXhsFollowerCount(userId: string): Promise<number | null> {
+  const profileUrl = `https://www.xiaohongshu.com/user/profile/${userId}`;
+  let state: Record<string, unknown> | null = null;
+  try {
+    const { html } = await fetchNotePage(profileUrl);
+    state = extractInitialState(html);
+  } catch {
+    return null;
+  }
+  if (!state) return null;
+
+  /* eslint-disable @typescript-eslint/no-explicit-any */
+  const interactions: { type?: string; count?: string }[] =
+    (state as any)?.user?.userPageData?.interactions ?? [];
+  /* eslint-enable @typescript-eslint/no-explicit-any */
+  const fans = interactions.find((i) => i?.type === "fans");
+  if (!fans?.count) return null;
+  return parseCount(fans.count);
 }

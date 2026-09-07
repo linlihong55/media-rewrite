@@ -8,7 +8,7 @@ import { ResolvedVideo } from "./resolveVideo";
 // 数据表和字段由程序自动创建，表 ID 记在 server/.feishu-state.json 里复用。
 
 const TABLE_NAME = "爆款文案改写记录";
-const STATE_FILE = path.join(process.cwd(), ".feishu-state.json");
+const STATE_FILE = process.env.FEISHU_STATE_FILE ?? path.join(process.cwd(), ".feishu-state.json");
 
 // 字段类型：1=多行文本 2=数字 5=日期 15=超链接
 const TABLE_FIELDS = [
@@ -29,9 +29,15 @@ const TABLE_FIELDS = [
 export interface FeishuSyncResult {
   synced: boolean;
   message: string;
+  recordId?: string;
 }
 
-interface FeishuAuth {
+export interface FeishuField {
+  field_name: string;
+  type: number;
+}
+
+export interface FeishuAuth {
   apiBase: string;
   token: string;
   appToken: string;
@@ -45,14 +51,15 @@ function parseBitableUrl(url: string): { appToken: string; tableId?: string } | 
   return { appToken: appMatch[1], tableId: tableMatch?.[1] };
 }
 
-async function feishuFetch(
+export async function feishuFetch(
   apiBase: string,
   token: string,
   apiPath: string,
-  body?: unknown
+  body?: unknown,
+  method?: "GET" | "POST" | "PUT"
 ): Promise<Record<string, unknown>> {
   const res = await fetch(`${apiBase}${apiPath}`, {
-    method: body === undefined ? "GET" : "POST",
+    method: method ?? (body === undefined ? "GET" : "POST"),
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
@@ -81,7 +88,7 @@ async function getTenantToken(apiBase: string, appId: string, appSecret: string)
   return json.tenant_access_token;
 }
 
-async function resolveAuth(): Promise<FeishuAuth | null> {
+export async function resolveAuth(): Promise<FeishuAuth | null> {
   const bitableUrl = process.env.FEISHU_BITABLE_URL || "";
   const parsed = bitableUrl ? parseBitableUrl(bitableUrl) : null;
 
@@ -115,22 +122,38 @@ async function resolveAuth(): Promise<FeishuAuth | null> {
 }
 
 interface FeishuState {
-  [appToken: string]: string; // appToken -> 自动创建的 tableId
+  [appToken: string]: {
+    [tableName: string]: string; // 表名 -> 自动创建的 tableId
+  };
 }
 
 function readState(): FeishuState {
+  let raw: Record<string, unknown>;
   try {
-    return JSON.parse(fs.readFileSync(STATE_FILE, "utf-8"));
+    raw = JSON.parse(fs.readFileSync(STATE_FILE, "utf-8"));
   } catch {
     return {};
   }
+  // 旧版本每个 appToken 只存一张表的 tableId（纯字符串），迁移成「表名 -> tableId」的嵌套结构，
+  // 避免多表化之后把老用户已有的 .feishu-state.json 当成对象用而崩溃/建出重复表
+  const migrated: FeishuState = {};
+  for (const [appToken, value] of Object.entries(raw)) {
+    migrated[appToken] =
+      typeof value === "string" ? { [TABLE_NAME]: value } : (value as { [k: string]: string });
+  }
+  return migrated;
 }
 
-async function ensureTableId(auth: FeishuAuth): Promise<string> {
-  if (auth.tableId) return auth.tableId;
-
+// 按「表名 + 字段清单」自动建表（不存在就建，存在就复用 state 里记的 tableId）。
+// 同一个 Base 下可以有多张表各自调用这个函数，互不影响。
+export async function ensureTableId(
+  auth: FeishuAuth,
+  tableName: string,
+  fields: FeishuField[]
+): Promise<string> {
   const state = readState();
-  if (state[auth.appToken]) return state[auth.appToken];
+  const tables = state[auth.appToken] ?? {};
+  if (tables[tableName]) return tables[tableName];
 
   const created = await feishuFetch(
     auth.apiBase,
@@ -138,25 +161,29 @@ async function ensureTableId(auth: FeishuAuth): Promise<string> {
     `/open-apis/bitable/v1/apps/${auth.appToken}/tables`,
     {
       table: {
-        name: TABLE_NAME,
+        name: tableName,
         default_view_name: "全部记录",
-        fields: TABLE_FIELDS,
+        fields,
       },
     }
   );
   const tableId = (created as { data?: { table_id?: string } }).data?.table_id;
   if (!tableId) throw new Error("飞书自动建表失败：接口没有返回 table_id");
 
-  state[auth.appToken] = tableId;
+  tables[tableName] = tableId;
+  state[auth.appToken] = tables;
   await fs.promises.writeFile(STATE_FILE, JSON.stringify(state, null, 2), "utf-8");
   return tableId;
 }
 
-// 老表可能缺新加的字段（如「视频链接」「记录时间」），保存前对照补齐。
-// 每个表每次进程只检查一次，避免每条记录都多两次接口调用。
+// 老表可能缺新加的字段，保存前对照补齐。每个表每次进程只检查一次。
 const ensuredTables = new Set<string>();
 
-async function ensureFields(auth: FeishuAuth, tableId: string): Promise<void> {
+export async function ensureFields(
+  auth: FeishuAuth,
+  tableId: string,
+  fields: FeishuField[]
+): Promise<void> {
   if (ensuredTables.has(tableId)) return;
 
   const listed = await feishuFetch(
@@ -168,7 +195,7 @@ async function ensureFields(auth: FeishuAuth, tableId: string): Promise<void> {
     (listed as { data?: { items?: { field_name?: string }[] } }).data?.items ?? [];
   const existing = new Set(items.map((f) => f.field_name));
 
-  for (const field of TABLE_FIELDS) {
+  for (const field of fields) {
     if (existing.has(field.field_name)) continue;
     await feishuFetch(
       auth.apiBase,
@@ -183,16 +210,17 @@ async function ensureFields(auth: FeishuAuth, tableId: string): Promise<void> {
 export async function saveToFeishu(
   video: ResolvedVideo,
   transcript: string,
-  rewritten: string
+  rewritten: string,
+  existingRecordId?: string | null
 ): Promise<FeishuSyncResult> {
   try {
     const auth = await resolveAuth();
     if (!auth) {
-      return { synced: false, message: "飞书未配置（配置见 server/.env.local），记录没有保存" };
+      return { synced: false, message: "飞书未配置，已跳过飞书同步" };
     }
 
-    const tableId = await ensureTableId(auth);
-    await ensureFields(auth, tableId);
+    const tableId = auth.tableId ?? (await ensureTableId(auth, TABLE_NAME, TABLE_FIELDS));
+    await ensureFields(auth, tableId, TABLE_FIELDS);
 
     const fields: Record<string, unknown> = {
       标题: video.title || "",
@@ -202,21 +230,27 @@ export async function saveToFeishu(
       点赞数: video.stats.diggCount,
       收藏数: video.stats.collectCount,
       原文案: transcript,
-      改写稿: rewritten,
       视频链接: { text: video.sourceUrl, link: video.sourceUrl },
       记录时间: Date.now(),
     };
+    if (rewritten.trim()) fields["改写稿"] = rewritten;
     if (video.createTime) fields["发布时间"] = video.createTime * 1000;
     if (video.author.followerCount != null) fields["粉丝数"] = video.author.followerCount;
 
-    await feishuFetch(
+    const result = await feishuFetch(
       auth.apiBase,
       auth.token,
-      `/open-apis/bitable/v1/apps/${auth.appToken}/tables/${tableId}/records`,
-      { fields }
+      `/open-apis/bitable/v1/apps/${auth.appToken}/tables/${tableId}/records${
+        existingRecordId ? `/${existingRecordId}` : ""
+      }`,
+      { fields },
+      existingRecordId ? "PUT" : "POST"
     );
+    const recordId =
+      existingRecordId ??
+      (result as { data?: { record?: { record_id?: string } } }).data?.record?.record_id;
 
-    return { synced: true, message: "已同步到飞书多维表格" };
+    return { synced: true, message: "已同步到飞书多维表格", recordId };
   } catch (err) {
     const message = err instanceof Error ? err.message : "未知错误";
     return { synced: false, message: `飞书同步失败：${message}` };

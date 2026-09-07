@@ -16,15 +16,28 @@ const statusEl = document.getElementById("status");
 const infoEl = document.getElementById("info");
 const transcriptBox = document.getElementById("transcript");
 const rewriteBox = document.getElementById("rewrite");
+const breakdownBox = document.getElementById("breakdown");
 const confirmBtn = document.getElementById("btn-confirm");
 const saveResultEl = document.getElementById("save-result");
+const taskListEl = document.getElementById("task-list");
+const downloadBtn = document.getElementById("btn-download");
+const transcribeBtn = document.getElementById("btn-transcribe");
+const rewriteBtn = document.getElementById("btn-rewrite");
+const breakdownBtn = document.getElementById("btn-breakdown");
+const barEl = document.getElementById("bar");
 
 let autoUrl = null;
 let userEditedUrl = false;
-let busy = false;
-let currentVideoData = null;
-let currentFilePath = null;
-let resultsUrl = null; // 当前文案/信息对应的视频链接，用于切视频时清理旧结果
+let activeUrl = null;
+const tasks = new Map();
+
+const OPERATION_LABELS = {
+  download: "下载",
+  transcribe: "提取",
+  rewrite: "改写",
+  breakdown: "拆解",
+  save: "保存",
+};
 
 // ---------- 与父页面通信 ----------
 
@@ -36,13 +49,20 @@ window.addEventListener("message", (e) => {
 });
 
 const appEl = document.getElementById("app");
-new ResizeObserver(() => {
-  const rect = appEl.getBoundingClientRect();
+function reportPanelSize() {
+  const cardVisible = !cardEl.classList.contains("hidden");
+  const cardMarginTop = cardVisible ? Number.parseFloat(getComputedStyle(cardEl).marginTop) || 0 : 0;
+  const width = Math.max(barEl.scrollWidth, cardVisible ? cardEl.scrollWidth : 0);
+  const height = barEl.offsetHeight + (cardVisible ? cardMarginTop + cardEl.scrollHeight : 0);
   window.parent.postMessage(
-    { type: "dhe:size", width: Math.ceil(rect.width), height: Math.ceil(rect.height) },
+    { type: "dhe:size", width: Math.ceil(width), height: Math.ceil(height) },
     "*"
   );
-}).observe(appEl);
+}
+
+const panelResizeObserver = new ResizeObserver(reportPanelSize);
+panelResizeObserver.observe(appEl);
+panelResizeObserver.observe(cardEl);
 
 window.parent.postMessage({ type: "dhe:ready" }, "*");
 
@@ -62,25 +82,19 @@ function setAutoUrl(url) {
   dotEl.classList.toggle("on", Boolean(url));
   dotEl.title = url ? `已识别：${url}` : "未识别到当前视频，可展开后手动粘贴链接";
   if (!userEditedUrl || !urlInput.value.trim()) {
-    urlInput.value = url || "";
-    userEditedUrl = false;
-  }
-  // 切到新视频且当前没有进行中的请求时，清掉上一条视频的结果，避免张冠李戴
-  if (!busy && resultsUrl && url && resultsUrl !== url) {
-    clearResults();
+    activateUrl(url, false);
   }
 }
 
 function clearResults() {
   transcriptBox.value = "";
   rewriteBox.value = "";
+  breakdownBox.value = "";
   infoEl.classList.add("hidden");
   confirmBtn.classList.add("hidden");
   statusEl.textContent = "";
   saveResultEl.textContent = "";
-  currentVideoData = null;
-  currentFilePath = null;
-  resultsUrl = null;
+  updateActionButtons(null);
 }
 
 // ---------- 基础交互 ----------
@@ -98,21 +112,17 @@ urlInput.addEventListener("input", () => {
   userEditedUrl = true;
 });
 
+urlInput.addEventListener("change", () => {
+  activateUrl(urlInput.value.trim() || null, true);
+});
+
 syncBtn.addEventListener("click", () => {
-  urlInput.value = autoUrl || "";
-  userEditedUrl = false;
+  activateUrl(autoUrl, false);
   setStatus(autoUrl ? "已恢复为自动识别的链接" : "当前未自动识别到视频");
 });
 
 function setStatus(text) {
   statusEl.textContent = text;
-}
-
-function setBusy(value) {
-  busy = value;
-  for (const id of ["btn-download", "btn-transcribe", "btn-rewrite"]) {
-    document.getElementById(id).disabled = value;
-  }
 }
 
 function formatCount(n) {
@@ -122,8 +132,7 @@ function formatCount(n) {
   return String(n);
 }
 
-function showVideoInfo(video) {
-  currentVideoData = video;
+function showVideoInfo(video, filePath) {
   infoEl.classList.remove("hidden");
   infoEl.textContent = "";
   const lines = [
@@ -134,12 +143,173 @@ function showVideoInfo(video) {
     `账号：${video.author.nickname}　粉丝数：${formatCount(video.author.followerCount)}`,
     `点赞数：${video.stats.diggCount}　收藏数：${video.stats.collectCount}`,
   ];
-  if (currentFilePath) lines.push(`视频文件：${currentFilePath}`);
+  if (filePath) lines.push(`视频文件：${filePath}`);
   for (const line of lines) {
     const div = document.createElement("div");
     div.textContent = line;
     infoEl.appendChild(div);
   }
+}
+
+function createTask(url) {
+  return {
+    url,
+    title: "",
+    videoData: null,
+    filePath: null,
+    transcript: "",
+    rewritten: "",
+    breakdown: "",
+    message: "等待执行",
+    saveResult: "",
+    operations: {
+      download: "idle",
+      transcribe: "idle",
+      rewrite: "idle",
+      breakdown: "idle",
+      save: "idle",
+    },
+  };
+}
+
+function ensureTask(url) {
+  let task = tasks.get(url);
+  if (!task) {
+    task = createTask(url);
+    tasks.set(url, task);
+    renderTaskList();
+  }
+  return task;
+}
+
+function getActiveTask() {
+  return activeUrl ? tasks.get(activeUrl) ?? null : null;
+}
+
+function saveActiveInputs() {
+  const task = getActiveTask();
+  if (!task) return;
+  task.transcript = transcriptBox.value;
+  task.rewritten = rewriteBox.value;
+}
+
+function activateUrl(url, manual) {
+  saveActiveInputs();
+  activeUrl = url;
+  userEditedUrl = manual;
+  urlInput.value = url || "";
+  renderActiveTask();
+  renderTaskList();
+}
+
+function renderActiveTask() {
+  const task = getActiveTask();
+  if (!task) {
+    clearResults();
+    return;
+  }
+
+  transcriptBox.value = task.transcript;
+  rewriteBox.value = task.rewritten;
+  breakdownBox.value = task.breakdown;
+  const stage = getTaskStage(task);
+  statusEl.textContent = stage.state === "running" ? `${stage.text}...` : task.message;
+  saveResultEl.textContent = task.saveResult;
+  if (task.videoData) showVideoInfo(task.videoData, task.filePath);
+  else infoEl.classList.add("hidden");
+  confirmBtn.classList.toggle(
+    "hidden",
+    task.operations.transcribe !== "done" && task.operations.rewrite !== "done"
+  );
+  updateActionButtons(task);
+}
+
+function updateActionButtons(task) {
+  const operations = task?.operations;
+  const mediaRunning =
+    operations?.download === "running" || operations?.transcribe === "running";
+  downloadBtn.disabled = Boolean(mediaRunning);
+  transcribeBtn.disabled = Boolean(mediaRunning);
+  rewriteBtn.disabled = operations?.rewrite === "running";
+  breakdownBtn.disabled = operations?.breakdown === "running";
+  confirmBtn.disabled = operations?.save === "running";
+}
+
+function getTaskStage(task) {
+  const running = Object.entries(task.operations)
+    .filter(([, state]) => state === "running")
+    .map(([name]) => OPERATION_LABELS[name]);
+  if (running.length) return { text: `${running.join("、")}中`, state: "running" };
+
+  const failed = Object.entries(task.operations)
+    .filter(([, state]) => state === "failed")
+    .map(([name]) => OPERATION_LABELS[name]);
+  if (failed.length) return { text: `${failed.at(-1)}失败`, state: "failed" };
+  if (task.operations.save === "done") return { text: "已保存", state: "done" };
+  if (task.operations.breakdown === "done") return { text: "拆解完成", state: "done" };
+  if (task.operations.rewrite === "done") return { text: "改写完成", state: "done" };
+  if (task.operations.transcribe === "done") return { text: "提取完成", state: "done" };
+  if (task.operations.download === "done") return { text: "下载完成", state: "done" };
+  return { text: "等待执行", state: "idle" };
+}
+
+function getTaskName(task) {
+  if (task.title) return task.title;
+  const id = task.url.match(/\/(?:video|note|explore|item|search_result)\/([0-9a-zA-Z]+)/)?.[1];
+  return id ? `视频 ${id}` : task.url;
+}
+
+function renderTaskList() {
+  taskListEl.textContent = "";
+  if (!tasks.size) {
+    const empty = document.createElement("div");
+    empty.className = "task-empty";
+    empty.textContent = "暂无任务";
+    taskListEl.appendChild(empty);
+    return;
+  }
+
+  for (const task of Array.from(tasks.values()).reverse()) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `task-item${task.url === activeUrl ? " active" : ""}`;
+    button.title = task.url;
+
+    const name = document.createElement("span");
+    name.className = "task-name";
+    name.textContent = getTaskName(task);
+
+    const stage = getTaskStage(task);
+    const status = document.createElement("span");
+    status.className = `task-stage ${stage.state}`;
+    status.textContent = stage.text;
+
+    button.append(name, status);
+    button.addEventListener("click", () => {
+      activateUrl(task.url, true);
+      setExpanded(true);
+    });
+    taskListEl.appendChild(button);
+  }
+}
+
+function refreshTask(task) {
+  if (task.url === activeUrl) renderActiveTask();
+  renderTaskList();
+}
+
+function startOperation(task, operation, message) {
+  if (task.operations[operation] === "running") return false;
+  task.operations[operation] = "running";
+  task.message = message;
+  refreshTask(task);
+  return true;
+}
+
+function finishOperation(task, operation, message, failed = false) {
+  task.operations[operation] = failed ? "failed" : "done";
+  task.message = message;
+  refreshTask(task);
 }
 
 async function callApi(path, body) {
@@ -153,8 +323,15 @@ async function callApi(path, body) {
   } catch {
     throw new Error("无法连接本地服务，请确认已在 server 目录运行 npm run dev（端口 3300）");
   }
-  const json = await res.json();
-  if (!res.ok) throw new Error(json.error || `请求失败（${res.status}）`);
+  const raw = await res.text();
+  let json;
+  try {
+    json = raw ? JSON.parse(raw) : null;
+  } catch {
+    throw new Error(`本地服务返回了非 JSON 响应（HTTP ${res.status}），请查看 server 终端日志`);
+  }
+  if (!res.ok) throw new Error(json?.error || `请求失败（HTTP ${res.status}）`);
+  if (!json) throw new Error(`本地服务返回了空响应（HTTP ${res.status}），请查看 server 终端日志`);
   return json.data;
 }
 
@@ -168,84 +345,127 @@ function requireUrl() {
   return url;
 }
 
+function requireTask() {
+  const url = requireUrl();
+  if (!url) return null;
+  if (url !== activeUrl) activateUrl(url, true);
+  return ensureTask(url);
+}
+
+function formatSaveResult(data) {
+  return data.feishu?.synced
+    ? "✅ 已保存到本地工作台，并同步到飞书"
+    : `⚠️ 已保存到本地工作台；${data.feishu?.message || "飞书未同步"}`;
+}
+
 // ---------- 三个功能按钮 ----------
 
-document.getElementById("btn-download").addEventListener("click", async () => {
-  const url = requireUrl();
-  if (!url) return;
+downloadBtn.addEventListener("click", async () => {
+  const task = requireTask();
+  if (!task || !startOperation(task, "download", "下载中...（视频较大可能需要一会儿）")) return;
   setExpanded(true);
-  setBusy(true);
-  setStatus("下载中...（视频较大可能需要一会儿）");
   try {
-    const data = await callApi("/api/download", { url });
-    currentFilePath = data.filePath;
-    showVideoInfo(data);
-    resultsUrl = url;
-    setStatus("下载完成");
+    const data = await callApi("/api/download", { url: task.url });
+    task.filePath = data.filePath;
+    task.videoData = data;
+    task.title = data.title || task.title;
+    finishOperation(task, "download", "下载完成");
   } catch (err) {
-    setStatus(`下载失败：${err.message}`);
-  } finally {
-    setBusy(false);
+    finishOperation(task, "download", `下载失败：${err.message}`, true);
   }
 });
 
-document.getElementById("btn-transcribe").addEventListener("click", async () => {
-  const url = requireUrl();
-  if (!url) return;
+transcribeBtn.addEventListener("click", async () => {
+  const task = requireTask();
+  if (
+    !task ||
+    !startOperation(task, "transcribe", "提取中...（下载视频 + 语音转写，可能需要 1-2 分钟）")
+  ) return;
   setExpanded(true);
-  setBusy(true);
-  setStatus("提取中...（下载视频 + 语音转写，可能需要 1-2 分钟）");
   try {
-    const data = await callApi("/api/transcribe", { url });
-    currentFilePath = data.filePath;
-    showVideoInfo(data);
-    transcriptBox.value = data.transcript;
-    resultsUrl = url;
-    setStatus("文案提取完成");
+    const data = await callApi("/api/transcribe", { url: task.url });
+    task.filePath = data.filePath;
+    task.videoData = data;
+    task.title = data.title || task.title;
+    task.transcript = data.transcript;
+    finishOperation(task, "transcribe", "文案提取完成，可直接确认并保存");
   } catch (err) {
-    setStatus(`提取失败：${err.message}`);
-  } finally {
-    setBusy(false);
+    finishOperation(task, "transcribe", `提取失败：${err.message}`, true);
   }
 });
 
-document.getElementById("btn-rewrite").addEventListener("click", async () => {
-  const text = transcriptBox.value.trim();
+rewriteBtn.addEventListener("click", async () => {
+  const task = requireTask();
+  if (!task) return;
+  saveActiveInputs();
+  const text = task.transcript.trim();
   setExpanded(true);
-  if (!text) return setStatus("请先提取文案，或在「原文案」中手动填写");
-  setBusy(true);
-  setStatus("改写中...");
+  if (!text) {
+    task.message = "请先提取文案，或在「原文案」中手动填写";
+    return refreshTask(task);
+  }
+  if (!startOperation(task, "rewrite", "改写中...")) return;
   try {
     const data = await callApi("/api/rewrite", { text });
-    rewriteBox.value = data.rewritten;
-    confirmBtn.classList.remove("hidden");
-    setStatus(
+    task.rewritten = data.rewritten;
+    finishOperation(
+      task,
+      "rewrite",
       data.skipped
         ? "改写完成（未配置改写服务，暂时原样返回，可手动编辑后确认）"
         : "改写完成，请确认后保存"
     );
   } catch (err) {
-    setStatus(`改写失败：${err.message}`);
-  } finally {
-    setBusy(false);
+    finishOperation(task, "rewrite", `改写失败：${err.message}`, true);
+  }
+});
+
+breakdownBtn.addEventListener("click", async () => {
+  const task = requireTask();
+  if (!task) return;
+  saveActiveInputs();
+  const text = task.transcript.trim();
+  setExpanded(true);
+  if (!text) {
+    task.message = "请先提取文案，或在「原文案」中手动填写";
+    return refreshTask(task);
+  }
+  if (!task.videoData) {
+    task.message = "请先提取文案（需要视频信息才能拆解存档）";
+    return refreshTask(task);
+  }
+  if (!startOperation(task, "breakdown", "拆解中...")) return;
+  try {
+    const data = await callApi("/api/breakdown", { video: task.videoData, transcript: text });
+    task.breakdown = data.breakdown;
+    finishOperation(task, "breakdown", `拆解完成，已存档至 ${data.filePath}`);
+  } catch (err) {
+    finishOperation(task, "breakdown", `拆解失败：${err.message}`, true);
   }
 });
 
 confirmBtn.addEventListener("click", async () => {
-  if (!currentVideoData) return setStatus("请先提取文案或下载视频");
-  confirmBtn.disabled = true;
-  saveResultEl.textContent = "保存中...";
+  const task = requireTask();
+  if (!task) return;
+  saveActiveInputs();
+  if (!task.videoData) {
+    task.message = "请先提取文案或下载视频";
+    return refreshTask(task);
+  }
+  if (!startOperation(task, "save", "保存中...")) return;
+  task.saveResult = "保存中...";
+  refreshTask(task);
   try {
     const data = await callApi("/api/save", {
-      video: currentVideoData,
-      transcript: transcriptBox.value,
-      rewritten: rewriteBox.value,
+      video: task.videoData,
+      transcript: task.transcript,
+      rewritten: task.rewritten,
     });
-    saveResultEl.textContent = `✅ ${data.feishu.message}`;
+    task.saveResult = formatSaveResult(data);
+    finishOperation(task, "save", task.saveResult);
   } catch (err) {
-    saveResultEl.textContent = `保存失败：${err.message}`;
-  } finally {
-    confirmBtn.disabled = false;
+    task.saveResult = `保存失败：${err.message}`;
+    finishOperation(task, "save", task.saveResult, true);
   }
 });
 
@@ -267,7 +487,6 @@ batchBtn.addEventListener("click", async () => {
   if (!urls.length) return setStatus("请先在批量输入框中粘贴链接，一行一个");
 
   batchBtn.disabled = true;
-  setBusy(true);
   batchProgress.textContent = "";
   const rows = urls.map((url) => {
     const div = document.createElement("div");
@@ -277,34 +496,44 @@ batchBtn.addEventListener("click", async () => {
   });
 
   let okCount = 0;
+  let feishuCount = 0;
   for (let i = 0; i < urls.length; i++) {
     const url = urls[i];
     rows[i].textContent = `▶ 提取中（${i + 1}/${urls.length}）${shortenUrl(url)}`;
     setStatus(`批量提取中：第 ${i + 1}/${urls.length} 条（每条需下载 + 转写，请耐心等待）`);
     try {
       const data = await callApi("/api/transcribe", { url });
-      await callApi("/api/save", {
+      const saved = await callApi("/api/save", {
         video: data,
         transcript: data.transcript,
         rewritten: "",
       });
       okCount++;
-      rows[i].textContent = `✅ ${data.title || shortenUrl(url)}｜已同步飞书`;
+      if (saved.feishu?.synced) feishuCount++;
+      rows[i].textContent = `✅ ${data.title || shortenUrl(url)}｜已保存本地${
+        saved.feishu?.synced ? "并同步飞书" : "（飞书未同步）"
+      }`;
     } catch (err) {
       rows[i].textContent = `❌ ${shortenUrl(url)}：${err.message}`;
     }
   }
 
-  setStatus(`批量提取完成：成功 ${okCount}/${urls.length} 条，已同步到飞书多维表格`);
-  setBusy(false);
+  setStatus(`批量提取完成：本地保存 ${okCount}/${urls.length} 条，飞书同步 ${feishuCount}/${urls.length} 条`);
   batchBtn.disabled = false;
 });
 
 // ---------- 启动时探测本地服务 ----------
 
+renderTaskList();
+
 (async () => {
   try {
     const res = await fetch(`${API_BASE}/api/health`);
+    const health = await res.json().catch(() => null);
+    if (!res.ok && health?.database === false) {
+      setStatus("提示：本地服务已启动，但数据库未就绪；保存和工作台暂不可用");
+      return;
+    }
     if (!res.ok) throw new Error();
   } catch {
     setStatus("提示：本地服务（localhost:3300）未启动，功能按钮暂不可用");

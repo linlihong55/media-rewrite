@@ -2,11 +2,17 @@ html,
 body {
   margin: 0;
   padding: 0;
+  height: 100%;
+  overflow: hidden;
   background: transparent;
 }
 
 #app {
   width: max-content;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
 }
 
@@ -19,6 +25,7 @@ body {
   border-radius: 999px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
   width: max-content;
+  flex-shrink: 0;
 }
 
 #dot {
@@ -60,11 +67,32 @@ body {
 #card {
   margin-top: 8px;
   width: 320px;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: #a8a8a8 transparent;
   background: #fff;
   border-radius: 8px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
   padding: 10px;
   box-sizing: border-box;
+}
+
+#card::-webkit-scrollbar {
+  width: 8px;
+}
+
+#card::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+#card::-webkit-scrollbar-thumb {
+  background: #a8a8a8;
+  border: 2px solid #fff;
+  border-radius: 999px;
 }
 
 #card .row {
@@ -151,6 +179,79 @@ body {
   color: #333;
   font-weight: 600;
   margin-bottom: 6px;
+}
+
+.queue-hint {
+  color: #777;
+  font-size: 11px;
+  line-height: 1.4;
+  margin-bottom: 6px;
+}
+
+.task-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  max-height: 150px;
+  overflow-y: auto;
+}
+
+.task-empty {
+  color: #999;
+  font-size: 11px;
+  padding: 5px 0;
+}
+
+.task-item {
+  width: 100%;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #e5e7eb;
+  border-radius: 5px;
+  background: #fafafa;
+  padding: 6px 8px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.task-item:hover {
+  border-color: #93c5fd;
+  background: #eff6ff;
+}
+
+.task-item.active {
+  border-color: #2563eb;
+  background: #eff6ff;
+}
+
+.task-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: #333;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-stage {
+  flex-shrink: 0;
+  color: #555;
+  font-size: 11px;
+}
+
+.task-stage.running {
+  color: #2563eb;
+}
+
+.task-stage.failed {
+  color: #dc2626;
+}
+
+.task-stage.done {
+  color: #16a34a;
 }
 
 .batch {

@@ -11,6 +11,7 @@
       <button id="btn-download" class="act">下载视频</button>
       <button id="btn-transcribe" class="act">提取文案</button>
       <button id="btn-rewrite" class="act">改写</button>
+      <button id="btn-breakdown" class="act">拆解</button>
       <button id="btn-toggle" title="展开 / 收起详情">▾</button>
     </div>
     <div id="card" class="hidden">
@@ -28,8 +29,16 @@
         <label>改写稿</label>
         <textarea id="rewrite" rows="4" placeholder="点击「改写」后显示"></textarea>
       </div>
+      <div class="row">
+        <label>拆解结果</label>
+        <textarea id="breakdown" rows="4" readonly placeholder="点击「拆解」后显示，并自动存档到 02_爆款原文库"></textarea>
+      </div>
       <button id="btn-confirm" class="confirm hidden">确认并保存</button>
       <div id="save-result" class="status"></div>
+      <div class="divider"></div>
+      <div class="section-title">后台任务队列</div>
+      <div class="queue-hint">切换视频不会中断任务，点击任务可查看对应结果</div>
+      <div id="task-list" class="task-list"></div>
       <div class="divider"></div>
       <div class="section-title">批量提取（一行一个链接，自动提取文案并存档）</div>
       <div class="row">
